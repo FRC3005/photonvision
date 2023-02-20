@@ -99,7 +99,9 @@ public class PhotonCamera {
     private final String path;
     private final String name;
 
-    private static boolean VERSION_CHECK_ENABLED = true;
+    private boolean versionCheckEnabled = true;
+    private boolean versionErrorOnce = true;
+    private boolean connectionErrorOnce = true;
     private static long VERSION_CHECK_INTERVAL = 5;
     private double lastVersionCheckTime = 0;
 
@@ -107,8 +109,8 @@ public class PhotonCamera {
     private double prevHeartbeatChangeTime = 0;
     private static final double HEARBEAT_DEBOUNCE_SEC = 0.5;
 
-    public static void setVersionCheckEnabled(boolean enabled) {
-        VERSION_CHECK_ENABLED = enabled;
+    public void setVersionCheckEnabled(boolean enabled) {
+        versionCheckEnabled = enabled;
     }
 
     Packet packet = new Packet(1);
@@ -335,7 +337,7 @@ public class PhotonCamera {
     }
 
     private void verifyVersion() {
-        if (!VERSION_CHECK_ENABLED) return;
+        if (!versionCheckEnabled) return;
 
         if ((Timer.getFPGATimestamp() - lastVersionCheckTime) < VERSION_CHECK_INTERVAL) return;
         lastVersionCheckTime = Timer.getFPGATimestamp();
@@ -344,7 +346,8 @@ public class PhotonCamera {
         // assume that a camera with that name was never connected in the first place.
         if (!heartbeatEntry.exists()) {
             Set<String> cameraNames = cameraTable.getInstance().getTable(kTableName).getSubTables();
-            if (cameraNames.isEmpty()) {
+            if (!connectionErrorOnce) {}
+            else if (cameraNames.isEmpty()) {
                 DriverStation.reportError(
                         "Could not find any PhotonVision coprocessors on NetworkTables. Double check that PhotonVision is running, and that your camera is connected!",
                         false);
@@ -359,16 +362,22 @@ public class PhotonCamera {
                                 + String.join("\n", cameraNames),
                         false);
             }
+            connectionErrorOnce = false;
         }
         // Check for connection status. Warn if disconnected.
         else if (!isConnected()) {
             DriverStation.reportWarning(
                     "PhotonVision coprocessor at path " + path + " is not sending new data.", true);
+            connectionErrorOnce = false;
+        }
+        // Unlatch error when seen then unseen again.
+        else {
+            connectionErrorOnce = true;
         }
 
         // Check for version. Warn if the versions aren't aligned.
         String versionString = versionEntry.get("");
-        if (!versionString.equals("") && !PhotonVersion.versionMatches(versionString)) {
+        if (!versionString.equals("") && !PhotonVersion.versionMatches(versionString) && versionErrorOnce) {
             // Error on a verified version mismatch
             // But stay silent otherwise
             DriverStation.reportWarning(
@@ -378,6 +387,7 @@ public class PhotonCamera {
                             + versionString
                             + "!",
                     true);
+            versionErrorOnce = false;
         }
     }
 }
