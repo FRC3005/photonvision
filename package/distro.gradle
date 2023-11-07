@@ -1,0 +1,57 @@
+apply plugin: 'com.netflix.nebula.rpm'
+
+ext {
+    // TODO: fix the version numbers...
+    rpmReleaseBase = 1
+    rpmVersion = project.wpilibVersion.split('-')[0]
+
+    def releaseMatch = project.versionString.find(/beta-(.+)/)
+    rpmRelease = rpmReleaseBase
+    if (releaseMatch) {
+        // Replace all hyphens with periods
+        rpmRelease += "." + releaseMatch.replaceAll('-', '.')
+    }
+}
+
+// TODO: Is there any big impact on having this here? Needed for dependency.
+evaluationDependsOn(':photon-server')
+
+task packageRpm(type: Rpm) {
+    dependsOn ':photon-server:shadowJar'
+    release project.rpmRelease
+    version project.rpmVersion
+    type BINARY
+
+    from(project(':photon-server').tasks.shadowJar.outputs.files) {
+        into '/var/photonvision'
+        fileMode 0644
+        rename { String fileName ->
+            if (fileName.startsWith("photonvision-") && fileName.endsWith(".jar")) {
+                "photonvision.jar"
+            } else {
+                fileName
+            }
+        }
+    }
+
+    from('./package/photonvision.service') {
+        into '/usr/lib/systemd/system'
+        fileMode 0644
+    }
+
+    // postInstall {
+    //     """#!/bin/sh
+    //     echo 'Enabling and starting the Photonvision service...'
+    //     systemctl enable photonvision.service
+    //     systemctl start photonvision.service
+    //     """
+    // }
+
+    // postUninstall {
+    //     """#!/bin/sh
+    //     echo 'Stopping and disabling the Photonvision service...'
+    //     systemctl disable photonvision.service
+    //     systemctl stop photonvision.service
+    //     """
+    // }
+}
