@@ -39,19 +39,6 @@ task packageRpm(type: Rpm) {
         fileMode 0644
     }
 
-    // postInstall {
-    //     """#!/bin/sh
-    //     echo 'Enabling and starting the Photonvision service...'
-    //     systemctl enable photonvision.service
-    //     systemctl start photonvision.service
-    //     """
-    // }
-
-    // postUninstall {
-    //     """#!/bin/sh
-    //     echo 'Stopping and disabling the Photonvision service...'
-    //     systemctl disable photonvision.service
-    //     systemctl stop photonvision.service
-    //     """
-    // }
+    postInstall file('./package/postInstall.sh')
+    preUninstall file('./package/preUninstall.sh')
 }
