@@ -29,6 +29,10 @@ import org.photonvision.common.configuration.PathManager;
 import org.photonvision.common.dataflow.DataChangeService;
 import org.photonvision.common.dataflow.events.OutgoingUIEvent;
 import org.photonvision.common.util.TimedTaskManager;
+import com.cloudbees.syslog.Facility;
+import com.cloudbees.syslog.MessageFormat;
+import com.cloudbees.syslog.Severity;
+import com.cloudbees.syslog.sender.UdpSyslogMessageSender;
 
 @SuppressWarnings("unused")
 public class Logger {
@@ -106,6 +110,7 @@ public class Logger {
     static {
         currentAppenders.add(new ConsoleLogAppender());
         currentAppenders.add(uiLogAppender);
+        currentAppenders.add(new SyslogAppender("SomeCoprocessor", "172.22.11.2"));
         addFileAppender(PathManager.getInstance().getLogPath());
         cleanLogs(PathManager.getInstance().getLogsDir());
     }
@@ -311,6 +316,50 @@ public class Logger {
             var superMap = new HashMap<String, Object>();
             superMap.put("logMessage", messageMap);
             DataChangeService.getInstance().publishEvent(OutgoingUIEvent.wrappedOf("log", superMap));
+        }
+    }
+
+    private static class SyslogAppender implements LogAppender {
+        private UdpSyslogMessageSender messageSender = new UdpSyslogMessageSender();
+
+        private Severity ConvertLogLevel(LogLevel level) {
+            switch (level) {
+                case DEBUG:
+                    return Severity.DEBUG;
+                case ERROR:
+                    return Severity.ERROR;
+                case INFO:
+                    return Severity.INFORMATIONAL;
+                case TRACE:
+                    return Severity.DEBUG;
+                case WARN:
+                    return Severity.WARNING;
+                default:
+                    return Severity.INFORMATIONAL;
+            }
+        }
+
+        public SyslogAppender(String hostname, String ip) {
+            this(hostname, ip, 514);
+        }
+
+        public SyslogAppender(String hostname, String ip, int port) {
+            messageSender.setDefaultMessageHostname(hostname);
+            messageSender.setDefaultAppName("photonvision");
+            messageSender.setDefaultFacility(Facility.USER);
+            messageSender.setDefaultSeverity(Severity.INFORMATIONAL);
+            messageSender.setSyslogServerHostname(ip);
+            messageSender.setSyslogServerPort(port);
+            messageSender.setMessageFormat(MessageFormat.RFC_5424);
+        }
+
+        @Override
+        public void log(String message, LogLevel level) {
+            messageSender.setDefaultSeverity(ConvertLogLevel(level));
+            try {
+                messageSender.sendMessage(message);
+            } catch (IOException e) {
+            }
         }
     }
 
